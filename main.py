@@ -10,6 +10,7 @@ from kivy.graphics import Color, Rectangle, RoundedRectangle
 from kivy.core.window import Window
 from kivy.metrics import dp
 from kivy.uix.filechooser import FileChooserListView
+import platform
 import os
 
 from schedule.lessons_for_today import get_today_schedule
@@ -153,8 +154,20 @@ def show_content_popup(title, content):
 def show_file_chooser(on_select_callback):
     layout = BgBoxLayout(bg_color=SURFACE, orientation="vertical", padding=dp(8), spacing=dp(6))
 
+    def get_default_path():
+        system = platform.system().lower()
+
+        if "android" in system:
+            return "/storage/emulated/0/Download"
+        elif "linux" in system:
+            return os.path.expanduser("~")
+        elif "windows" in system:
+            return os.path.join(os.environ["USERPROFILE"],"Downloads")
+        else:
+            return os.path.expanduser("~")
+
     chooser = FileChooserListView(
-    path="/storage/emulated/0/Download",
+    path=get_default_path(),
     filters=["*.xls", "*.xlsx"],
     size_hint=(1, 1),
 	)
