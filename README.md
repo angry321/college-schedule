@@ -60,7 +60,6 @@ college-schedule/
 │   ├── lessons_for_week.py    # Логика для расписания на неделю
 │   └── calls.py               # Расписание звонков
 ├── requirements.txt           # Зависимости проекта
-├── .gitignore                 # Исключённые файлы
 ├── path_to_table.txt          # Конфиг (создаётся автоматически)
 └── README.md
 ```
