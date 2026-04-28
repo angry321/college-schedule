@@ -1,191 +1,327 @@
-from tkinter import *
-from tkinter import filedialog
+from kivy.app import App
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.scrollview import ScrollView
+from kivy.uix.label import Label
+from kivy.uix.button import Button
+from kivy.uix.popup import Popup
+from kivy.uix.floatlayout import FloatLayout
+from kivy.uix.widget import Widget
+from kivy.graphics import Color, Rectangle, RoundedRectangle
+from kivy.core.window import Window
+from kivy.metrics import dp
+from kivy.uix.filechooser import FileChooserListView
 import os
 
 from schedule.lessons_for_today import get_today_schedule
 from schedule.lessons_for_week import get_week_schedule, format_week_schedule
 from schedule.calls import get_calls_schedule
 
-BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
+# ── Путь к файлу конфига ────────────────────────────────────────────────────
+BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(BASE_DIR, "path_to_table.txt")
 
-# color
-BG        = "#0f1117"   # фон приложения
-SURFACE   = "#1a1d27"   # фон карточек / окон
-SURFACE2  = "#22263a"   # чуть светлее для hover
-ACCENT    = "#5c6ef8"   # синий акцент
-ACCENT_H  = "#7b8ffb"   # hover акцент
-TEXT      = "#e8eaf6"   # основной текст
-TEXT_DIM  = "#6b7280"   # второстепенный текст
-BORDER    = "#2d3148"   # рамки
-SUCCESS   = "#4ade80"   # зелёный (сохранено)
-FONT_MAIN = ("Segoe UI", 5)
-FONT_H    = ("Segoe UI Semibold", 8)
-FONT_BIG  = ("Segoe UI Semibold", 5)
-FONT_MONO = ("Consolas", 7)
+# ── Цветовая схема (hex → kivy rgba 0–1) ───────────────────────────────────
+def hex_to_rgba(h, a=1.0):
+    h = h.lstrip("#")
+    r, g, b = (int(h[i:i+2], 16) / 255 for i in (0, 2, 4))
+    return r, g, b, a
 
-def _on_enter(btn, color=ACCENT_H):
-    btn.config(bg=color)
+BG       = "#0f1117"
+SURFACE  = "#1a1d27"
+SURFACE2 = "#22263a"
+ACCENT   = "#5c6ef8"
+ACCENT_H = "#7b8ffb"
+TEXT     = "#e8eaf6"
+TEXT_DIM = "#6b7280"
+BORDER   = "#2d3148"
+SUCCESS  = "#4ade80"
 
-def _on_leave(btn, color=ACCENT):
-    btn.config(bg=color)
+Window.clearcolor = hex_to_rgba(BG)
 
-def _make_btn(parent, text, icon, cmd):
-    """Кнопка с иконкой — эмодзи-префикс + текст."""
-    f = Frame(parent, bg=SURFACE, cursor="hand2")
-    f.pack(fill=X, pady=5, padx=20)
 
-    inner = Frame(f, bg=ACCENT, bd=0)
-    inner.pack(fill=X)
+# ── Вспомогательные виджеты ─────────────────────────────────────────────────
 
+class BgWidget(Widget):
+    """Виджет с заливкой фона."""
+    def __init__(self, bg_color=SURFACE, **kwargs):
+        super().__init__(**kwargs)
+        self.bg_color = hex_to_rgba(bg_color)
+        with self.canvas.before:
+            Color(*self.bg_color)
+            self._rect = Rectangle(pos=self.pos, size=self.size)
+        self.bind(pos=self._update, size=self._update)
+
+    def _update(self, *_):
+        self._rect.pos  = self.pos
+        self._rect.size = self.size
+
+
+class BgBoxLayout(BoxLayout):
+    """BoxLayout с заливкой фона."""
+    def __init__(self, bg_color=SURFACE, radius=0, **kwargs):
+        super().__init__(**kwargs)
+        self.bg_color = hex_to_rgba(bg_color)
+        self._radius  = radius
+        with self.canvas.before:
+            Color(*self.bg_color)
+            if radius:
+                self._rect = RoundedRectangle(pos=self.pos, size=self.size,
+                                               radius=[radius])
+            else:
+                self._rect = Rectangle(pos=self.pos, size=self.size)
+        self.bind(pos=self._update, size=self._update)
+
+    def _update(self, *_):
+        self._rect.pos  = self.pos
+        self._rect.size = self.size
+
+
+class AccentButton(Button):
+    """Кнопка в стиле акцента."""
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.background_normal   = ""
+        self.background_down     = ""
+        self.background_color    = hex_to_rgba(ACCENT)
+        self.color               = (1, 1, 1, 1)
+        self.font_size           = dp(14)
+        self.bold                = True
+        self.size_hint_y         = None
+        self.height              = dp(52)
+        self.halign              = "left"
+        self.padding             = [dp(20), dp(0), dp(20), dp(0)]
+        self.bind(on_press=self._press, on_release=self._release)
+
+    def _press(self, *_):
+        self.background_color = hex_to_rgba(ACCENT_H)
+
+    def _release(self, *_):
+        self.background_color = hex_to_rgba(ACCENT)
+
+
+# ── Popup с контентом ────────────────────────────────────────────────────────
+
+def show_content_popup(title, content):
+    layout = BgBoxLayout(bg_color=SURFACE, orientation="vertical", padding=dp(8), spacing=dp(6))
+
+    # Заголовок popup
+    header = BgBoxLayout(bg_color=SURFACE2, size_hint_y=None, height=dp(48),
+                         padding=[dp(14), 0], spacing=dp(8))
+    header.add_widget(Label(text=title, color=hex_to_rgba(TEXT), font_size=dp(15),
+                            bold=True, halign="left", valign="middle"))
+    layout.add_widget(header)
+
+    # Разделитель
+    sep = BgWidget(bg_color=BORDER, size_hint_y=None, height=dp(1))
+    layout.add_widget(sep)
+
+    # Текст со скроллом
+    scroll = ScrollView(size_hint=(1, 1))
     lbl = Label(
-        inner,
-        text=f"  {text}",
-        bg=ACCENT, fg="white",
-        font=FONT_H,
-        anchor=W,
-        padx=14, pady=12,
+        text=content,
+        color=hex_to_rgba(TEXT),
+        font_size=dp(13),
+        halign="left",
+        valign="top",
+        size_hint_y=None,
+        padding=[dp(12), dp(10)],
     )
-    lbl.pack(fill=X)
+    lbl.bind(texture_size=lambda inst, val: setattr(inst, "height", val[1]))
+    lbl.bind(width=lambda inst, val: setattr(inst, "text_size", (val - dp(24), None)))
+    scroll.add_widget(lbl)
+    layout.add_widget(scroll)
 
-    for w in (inner, lbl):
-        w.bind("<Enter>",  lambda e, b=inner, l=lbl: (b.config(bg=ACCENT_H), l.config(bg=ACCENT_H)))
-        w.bind("<Leave>",  lambda e, b=inner, l=lbl: (b.config(bg=ACCENT),   l.config(bg=ACCENT)))
-        w.bind("<Button-1>", lambda e: cmd())
-
-    return f
-
-def _drag_start(win, event):
-    win._drag_x = event.x
-    win._drag_y = event.y
-
-def _drag_move(win, event):
-    dx = event.x - win._drag_x
-    dy = event.y - win._drag_y
-    x  = win.winfo_x() + dx
-    y  = win.winfo_y() + dy
-    win.geometry(f"+{x}+{y}")
-
-def _make_titlebar(win, title, close_cmd):
-    bar = Frame(win, bg=SURFACE2, height=100)
-    bar.pack(fill=X)
-    bar.pack_propagate(False)
-
-    Label(bar, text=title, bg=SURFACE2, fg=TEXT, font=FONT_H).pack(side=LEFT, padx=14)
-
-    close = Label(bar, text="✕", bg=SURFACE2, fg=TEXT_DIM,
-                  font=("Segoe UI", 8, "bold"), cursor="hand2", padx=12)
-    close.pack(side=RIGHT)
-    close.bind("<Button-1>", lambda e: close_cmd())
-    close.bind("<Enter>",    lambda e: close.config(fg="#ef4444"))
-    close.bind("<Leave>",    lambda e: close.config(fg=TEXT_DIM))
-
-    bar.bind("<ButtonPress-1>",   lambda e: _drag_start(win, e))
-    bar.bind("<B1-Motion>",       lambda e: _drag_move(win, e))
-
-def show_window(title, content):
-    win = Toplevel(root)
-    win.title(title)
-    win.geometry("1060x2250")
-    win.configure(bg=SURFACE)
-    win.overrideredirect(True)
-
-    _make_titlebar(win, title, win.destroy)
-  
-    Frame(win, bg=BORDER, height=1).pack(fill=X)
-
-    text_frame = Frame(win, bg=SURFACE, padx=6, pady=6)
-    text_frame.pack(fill=BOTH, expand=True)
-
-    scrollbar = Scrollbar(text_frame, troughcolor=SURFACE, bg=SURFACE2,
-                          activebackground=ACCENT, relief=FLAT, width=8)
-    scrollbar.pack(side=RIGHT, fill=Y)
-
-    text = Text(
-        text_frame,
-        yscrollcommand=scrollbar.set,
-        font=FONT_MONO,
-        bg=BG, fg=TEXT,
-        insertbackground=TEXT,
-        selectbackground=ACCENT,
-        relief=FLAT,
-        padx=12, pady=10,
-        spacing1=3, spacing3=3,
-        wrap=WORD,
+    popup = Popup(
+        title="",
+        title_size=0,
+        separator_height=0,
+        content=layout,
+        size_hint=(0.92, 0.85),
+        background="",
+        background_color=hex_to_rgba(SURFACE),
     )
-    text.pack(side=LEFT, fill=BOTH, expand=True)
-    scrollbar.config(command=text.yview)
+    # Кнопка закрытия
+    close_btn = AccentButton(text="Закрыть", size_hint_y=None, height=dp(44))
+    close_btn.bind(on_press=popup.dismiss)
+    layout.add_widget(close_btn)
 
-    text.insert(END, content)
-    text.config(state=DISABLED)
+    popup.open()
 
-    win.update_idletasks()
-    rx = root.winfo_x() + (root.winfo_width()  - win.winfo_width())  // 2
-    ry = root.winfo_y() + (root.winfo_height() - win.winfo_height()) // 2
-    win.geometry(f"+{rx}+{ry}")
 
-def show_calls():
-    show_window("Расписание звонков", get_calls_schedule())
+# ── Popup выбора файла ────────────────────────────────────────────────────────
 
-def show_lessons_today():
-    show_window("Расписание на сегодня", get_today_schedule())
+def show_file_chooser(on_select_callback):
+    layout = BgBoxLayout(bg_color=SURFACE, orientation="vertical", padding=dp(8), spacing=dp(6))
 
-def show_lessons_week():
-    schedule = get_week_schedule()
-    if schedule is None:
-        show_window("Расписание на неделю", "Файл не найден или не указан")
-    else:
-        show_window("Расписание на неделю", format_week_schedule(schedule))
+    chooser = FileChooserListView(
+    path="/storage/emulated/0/Download",
+    filters=["*.xls", "*.xlsx"],
+    size_hint=(1, 1),
+	)
+    chooser.color = hex_to_rgba(TEXT)
+    layout.add_widget(chooser)
 
-def choose_file():
-    file_path = filedialog.askopenfilename(
-        title="Выбрать файл расписания",
-        filetypes=[("Excel файлы", "*.xls *.xlsx")]
+    btn_row = BoxLayout(size_hint_y=None, height=dp(52), spacing=dp(8))
+
+    cancel_btn = AccentButton(text="Отмена")
+    cancel_btn.background_color = hex_to_rgba(SURFACE2)
+
+    select_btn = AccentButton(text="Выбрать")
+
+    btn_row.add_widget(cancel_btn)
+    btn_row.add_widget(select_btn)
+    layout.add_widget(btn_row)
+
+    popup = Popup(
+        title="",
+        title_size=0,
+        separator_height=0,
+        content=layout,
+        size_hint=(0.95, 0.9),
+        background="",
+        background_color=hex_to_rgba(SURFACE),
     )
-    if file_path:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            f.write(file_path)
-        short = os.path.basename(file_path)
-        file_label.config(text=f"{short}", fg=SUCCESS)
 
-root = Tk()
-root.title("Расписание")
-root.geometry("1060x2250")
-root.configure(bg=BG)
-root.overrideredirect(True)
-root.resizable(False, False)
+    def _select(*_):
+        if chooser.selection:
+            on_select_callback(chooser.selection[0])
+            popup.dismiss()
 
-root.update_idletasks()
-sw = root.winfo_screenwidth()
-sh = root.winfo_screenheight()
-root.geometry(f"1060x2250+{(sw-380)//2}+{(sh-440)//2}")
+    select_btn.bind(on_press=_select)
+    cancel_btn.bind(on_press=popup.dismiss)
+    popup.open()
 
-_make_titlebar(root, "Расписание", root.destroy)
-Frame(root, bg=BORDER, height=1).pack(fill=X)
 
-Label(root, text="Просмотр расписания",
-      bg=BG, fg=TEXT_DIM, font=("Segoe UI", 5)).pack(anchor=W, padx=20, pady=(16, 4))
+# ── Главный экран ─────────────────────────────────────────────────────────────
 
-_make_btn(root, "Расписание на сегодня", " ", show_lessons_today)
-_make_btn(root, "Расписание на неделю", " ", show_lessons_week)
-_make_btn(root, "Расписание звонков", " ", show_calls)
+class MainScreen(BgBoxLayout):
+    def __init__(self, **kwargs):
+        super().__init__(bg_color=BG, orientation="vertical",
+                         padding=[dp(0), dp(0)], spacing=0, **kwargs)
+        self._build_ui()
 
-Frame(root, bg=BORDER, height=1).pack(fill=X, padx=20, pady=14)
+    def _build_ui(self):
+        # ── Заголовок ──
+        title_bar = BgBoxLayout(
+            bg_color=SURFACE2, size_hint_y=None, height=dp(56),
+            padding=[dp(16), 0], spacing=0,
+        )
+        title_bar.add_widget(Label(
+            text="Расписание",
+            color=hex_to_rgba(TEXT),
+            font_size=dp(17),
+            bold=True,
+            halign="left", valign="middle",
+        ))
+        self.add_widget(title_bar)
 
-Label(root, text="Файл расписания",
-      bg=BG, fg=TEXT_DIM, font=("Segoe UI", 5)).pack(anchor=W, padx=20, pady=(0, 4))
+        # Разделитель
+        self.add_widget(BgWidget(bg_color=BORDER, size_hint_y=None, height=dp(1)))
 
-_make_btn(root, "Выбрать файл (.xls / .xlsx)", " ", choose_file)
+        # ── Контент со скроллом ──
+        scroll = ScrollView(size_hint=(1, 1))
+        content = BgBoxLayout(
+            bg_color=BG, orientation="vertical",
+            padding=[dp(16), dp(16)], spacing=dp(6),
+            size_hint_y=None,
+        )
+        content.bind(minimum_height=content.setter("height"))
 
-file_label = Label(root, text="", bg=BG, fg=TEXT_DIM, font=("Segoe UI", 9))
-file_label.pack(anchor=W, padx=34)
+        # Секция: Просмотр
+        content.add_widget(self._section_label("Просмотр расписания"))
+        content.add_widget(self._btn("Расписание на сегодня", self.show_today))
+        content.add_widget(self._btn("Расписание на неделю",  self.show_week))
+        content.add_widget(self._btn("Расписание звонков",    self.show_calls))
 
-try:
-    with open(CONFIG_FILE, encoding="utf-8") as f:
-        saved = f.read().strip()
-    if saved:
-        file_label.config(text=f"{os.path.basename(saved)}", fg=SUCCESS)
-except FileNotFoundError:
-    pass
+        # Разделитель
+        content.add_widget(BgWidget(bg_color=BORDER, size_hint_y=None, height=dp(1)))
+        content.add_widget(Widget(size_hint_y=None, height=dp(4)))
 
-root.mainloop()
+        # Секция: Файл
+        content.add_widget(self._section_label("Файл расписания"))
+        content.add_widget(self._btn("Выбрать файл (.xls / .xlsx)", self.choose_file))
+
+        # Метка текущего файла
+        self.file_label = Label(
+            text="",
+            color=hex_to_rgba(TEXT_DIM),
+            font_size=dp(12),
+            halign="left", valign="top",
+            size_hint_y=None, height=dp(32),
+            padding=[dp(4), 0],
+        )
+        self.file_label.bind(size=lambda inst, val: setattr(inst, "text_size", val))
+        content.add_widget(self.file_label)
+
+        scroll.add_widget(content)
+        self.add_widget(scroll)
+
+        # Загрузить сохранённый путь
+        self._load_saved_path()
+
+    # ── Фабрики виджетов ──
+
+    def _section_label(self, text):
+        lbl = Label(
+            text=text,
+            color=hex_to_rgba(TEXT_DIM),
+            font_size=dp(12),
+            halign="left", valign="middle",
+            size_hint_y=None, height=dp(28),
+            padding=[dp(4), 0],
+        )
+        lbl.bind(size=lambda inst, val: setattr(inst, "text_size", val))
+        return lbl
+
+    def _btn(self, label, callback):
+        btn = AccentButton(text=f"  {label}")
+        btn.bind(on_release=lambda *_: callback())
+        return btn
+
+    # ── Обработчики ──
+
+    def show_calls(self):
+        show_content_popup("Расписание звонков", get_calls_schedule())
+
+    def show_today(self):
+        show_content_popup("Расписание на сегодня", get_today_schedule())
+
+    def show_week(self):
+        schedule = get_week_schedule()
+        if schedule is None:
+            show_content_popup("Расписание на неделю", "Файл не найден или не указан")
+        else:
+            show_content_popup("Расписание на неделю", format_week_schedule(schedule))
+
+    def choose_file(self):
+        def on_select(path):
+            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+                f.write(path)
+            short = os.path.basename(path)
+            self.file_label.text  = short
+            self.file_label.color = hex_to_rgba(SUCCESS)
+
+        show_file_chooser(on_select)
+
+    def _load_saved_path(self):
+        try:
+            with open(CONFIG_FILE, encoding="utf-8") as f:
+                saved = f.read().strip()
+            if saved:
+                self.file_label.text  = os.path.basename(saved)
+                self.file_label.color = hex_to_rgba(SUCCESS)
+        except FileNotFoundError:
+            pass
+
+
+# ── Приложение ────────────────────────────────────────────────────────────────
+
+class ScheduleApp(App):
+    def build(self):
+        self.title = "Расписание"
+        Window.size  = (1060, 2250)   # для десктопа; на Android игнорируется
+        return MainScreen()
+
+
+if __name__ == "__main__":
+    ScheduleApp().run()
