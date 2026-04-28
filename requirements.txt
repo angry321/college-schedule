@@ -2,3 +2,4 @@ openpyxl
 pandas
 xlrd
 pillow
+kivy
