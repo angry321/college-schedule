@@ -55,12 +55,13 @@ python main.py
 ```
 college-schedule/
 ├── main.py                    # Главное окно приложения
+├── config.py
 ├── schedule/
 │   ├── lessons_for_today.py   # Логика для расписания на день
 │   ├── lessons_for_week.py    # Логика для расписания на неделю
 │   └── calls.py               # Расписание звонков
 ├── requirements.txt           # Зависимости проекта
-├── path_to_table.txt          # Конфиг (создаётся автоматически)
+├── path_to_table.txt          # Конфиг с абсолютным путём до таблицы (создаётся автоматически)
 └── README.md
 ```
 
