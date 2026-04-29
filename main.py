@@ -17,11 +17,9 @@ from schedule.lessons_for_today import get_today_schedule
 from schedule.lessons_for_week import get_week_schedule, format_week_schedule
 from schedule.calls import get_calls_schedule
 
-# ── Путь к файлу конфига ────────────────────────────────────────────────────
 BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(BASE_DIR, "path_to_table.txt")
 
-# ── Цветовая схема (hex → kivy rgba 0–1) ───────────────────────────────────
 def hex_to_rgba(h, a=1.0):
     h = h.lstrip("#")
     r, g, b = (int(h[i:i+2], 16) / 255 for i in (0, 2, 4))
@@ -39,8 +37,6 @@ SUCCESS  = "#4ade80"
 
 Window.clearcolor = hex_to_rgba(BG)
 
-
-# ── Вспомогательные виджеты ─────────────────────────────────────────────────
 
 class BgWidget(Widget):
     """Виджет с заливкой фона."""
@@ -100,7 +96,6 @@ class AccentButton(Button):
         self.background_color = hex_to_rgba(ACCENT)
 
 
-# ── Popup с контентом ────────────────────────────────────────────────────────
 
 def show_content_popup(title, content):
     layout = BgBoxLayout(bg_color=SURFACE, orientation="vertical", padding=dp(8), spacing=dp(6))
@@ -149,19 +144,19 @@ def show_content_popup(title, content):
     popup.open()
 
 
-# ── Popup выбора файла ────────────────────────────────────────────────────────
+# Выбор файла
 
 def show_file_chooser(on_select_callback):
     layout = BgBoxLayout(bg_color=SURFACE, orientation="vertical", padding=dp(8), spacing=dp(6))
     
     def get_default_path():
-    	# Android почти всегда имеет эту папку
+    	# Android
     	if os.path.exists("/storage/emulated/0/Download"):
     		return "/storage/emulated/0/Download"
     	# Windows
     	if os.name == "nt":
     		return os.path.join(os.environ["USERPROFILE"], "Downloads")
-    	# Linux / ПК
+    	# Linux
     	return os.path.expanduser("~")
 
     chooser = FileChooserListView(
@@ -203,7 +198,7 @@ def show_file_chooser(on_select_callback):
     popup.open()
 
 
-# ── Главный экран ─────────────────────────────────────────────────────────────
+# Главный экран
 
 class MainScreen(BgBoxLayout):
     def __init__(self, **kwargs):
@@ -212,7 +207,7 @@ class MainScreen(BgBoxLayout):
         self._build_ui()
 
     def _build_ui(self):
-        # ── Заголовок ──
+        # Заголовок
         title_bar = BgBoxLayout(
             bg_color=SURFACE2, size_hint_y=None, height=dp(56),
             padding=[dp(16), 0], spacing=0,
@@ -229,7 +224,7 @@ class MainScreen(BgBoxLayout):
         # Разделитель
         self.add_widget(BgWidget(bg_color=BORDER, size_hint_y=None, height=dp(1)))
 
-        # ── Контент со скроллом ──
+        # Контент со скроллом
         scroll = ScrollView(size_hint=(1, 1))
         content = BgBoxLayout(
             bg_color=BG, orientation="vertical",
@@ -270,7 +265,6 @@ class MainScreen(BgBoxLayout):
         # Загрузить сохранённый путь
         self._load_saved_path()
 
-    # ── Фабрики виджетов ──
 
     def _section_label(self, text):
         lbl = Label(
@@ -289,7 +283,7 @@ class MainScreen(BgBoxLayout):
         btn.bind(on_release=lambda *_: callback())
         return btn
 
-    # ── Обработчики ──
+    # Обработчики
 
     def show_calls(self):
         show_content_popup("Расписание звонков", get_calls_schedule())
@@ -325,12 +319,12 @@ class MainScreen(BgBoxLayout):
             pass
 
 
-# ── Приложение ────────────────────────────────────────────────────────────────
+# Приложение
 
 class ScheduleApp(App):
     def build(self):
         self.title = "Расписание"
-        Window.size  = (1060, 2250)   # для десктопа; на Android игнорируется
+        Window.size  = (1060, 2250) # Размер окна
         return MainScreen()
 
 
